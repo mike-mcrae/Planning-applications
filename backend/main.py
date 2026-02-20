@@ -45,6 +45,10 @@ MASTER_OBS_CSV = _pick_path(
     DATA_DIR / "applications_master_with_obs.csv",
     LEGACY_SCRIPTS_DIR / "outputs" / "applications_master_with_obs.csv",
 )
+OBS_GEOCODED_CSV = _pick_path(
+    DATA_DIR / "DCC_objections_geocoded.csv",
+    LEGACY_DATA_DIR / "DCC_objections_geocoded.csv",
+)
 DEV_SA_SHP = (
     LEGACY_DATA_DIR
     / "Small_Area_National_Statistical_Boundaries_2022_Ungeneralised_view_2205995009404967982"
@@ -136,6 +140,56 @@ def _resolve_year_window(year: int | None, year_min: int | None, year_max: int |
     return year_min, year_max
 
 
+def _load_observations() -> pd.DataFrame:
+    if MASTER_OBS_CSV.exists():
+        LOGGER.info("Loading observations from %s", MASTER_OBS_CSV)
+        obs = pd.read_csv(MASTER_OBS_CSV)
+        needed = {"application_number", "n_observation_letters", "has_observation"}
+        missing = needed - set(obs.columns)
+        if missing:
+            raise RuntimeError(f"Observation file missing required columns: {sorted(missing)}")
+        return obs[["application_number", "n_observation_letters", "has_observation"]].copy()
+
+    if OBS_GEOCODED_CSV.exists():
+        LOGGER.warning(
+            "Primary observation file missing (%s). Falling back to %s",
+            MASTER_OBS_CSV,
+            OBS_GEOCODED_CSV,
+        )
+        fallback = pd.read_csv(OBS_GEOCODED_CSV)
+        app_col = "application_number" if "application_number" in fallback.columns else "Application Number"
+        letters_col = "n_observation_letters"
+        has_obs_col = (
+            "has_observation"
+            if "has_observation" in fallback.columns
+            else "has_third_party_observation"
+            if "has_third_party_observation" in fallback.columns
+            else None
+        )
+        if app_col not in fallback.columns or letters_col not in fallback.columns:
+            raise RuntimeError(
+                "Fallback observation file is missing required columns: "
+                f"{app_col}, {letters_col}"
+            )
+        grouped = (
+            fallback[[app_col, letters_col] + ([has_obs_col] if has_obs_col else [])]
+            .rename(columns={app_col: "application_number"})
+            .groupby("application_number", as_index=False)
+            .agg(
+                n_observation_letters=(letters_col, "max"),
+                has_observation=(has_obs_col, "max") if has_obs_col else (letters_col, lambda s: (s.fillna(0) > 0).any()),
+            )
+        )
+        return grouped
+
+    LOGGER.warning(
+        "No observation source found (%s or %s). Proceeding with zero observations.",
+        MASTER_OBS_CSV,
+        OBS_GEOCODED_CSV,
+    )
+    return pd.DataFrame(columns=["application_number", "n_observation_letters", "has_observation"])
+
+
 def _read_geometry_with_crs(path: Path) -> gpd.GeoDataFrame:
     frame = gpd.read_file(path)
     if frame.crs is None:
@@ -201,7 +255,7 @@ def _load_geometries() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame, str]:
 def _load_data() -> dict[str, Any]:
     planning = pd.read_csv(PLANNING_CSV)
     geocoded = pd.read_csv(GEOCODED_CSV)
-    obs = pd.read_csv(MASTER_OBS_CSV)
+    obs = _load_observations()
 
     planning = planning.rename(
         columns={
@@ -303,11 +357,9 @@ def _load_data() -> dict[str, Any]:
     ed_pop = _read_ed_population()
 
     sa_base = sa_gdf.merge(sa_pop, on="SA_GUID_21", how="left")
-    ed_base = (
-        ed_gdf
-        .merge(ed_pop, on="ED_GUID", how="left")
-        .rename(columns={"ED_ENGLISH": "ed_name"})
-    )
+    ed_base = ed_gdf.merge(ed_pop, on="ED_GUID", how="left")
+    if "ed_name" not in ed_base.columns and "ED_ENGLISH" in ed_base.columns:
+        ed_base = ed_base.rename(columns={"ED_ENGLISH": "ed_name"})
 
     LOGGER.info("Environment mode: %s", ENVIRONMENT)
     LOGGER.info("Geometry source: %s", geometry_source)
