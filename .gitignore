@@ -1,36 +1,42 @@
-# Ignore download folders
+# =====================================
+# RAW LOCAL DATA (never push)
+# =====================================
+0. data/
+1. scripts/logs/
+1. scripts/outputs/
 1. scripts/downloads/
-1. scripts/outputs/downloads/
 
+# =====================================
+# Shapefile components
+# =====================================
+*.shp
+*.dbf
+*.shx
+*.prj
+*.cpg
+*.zip
+
+# =====================================
 # Python
+# =====================================
 __pycache__/
 *.pyc
-
-# Environment
-.env
 .venv/
 
+# =====================================
+# Environment
+# =====================================
+.env
+
+# =====================================
 # Frontend build artifacts
+# =====================================
 frontend/node_modules/
 frontend/dist/
 frontend/build/
 
-# macOS
+# =====================================
+# OS
+# =====================================
 .DS_Store
-# Ignore scrape outputs
-1. scripts/downloads/
-1. scripts/outputs/downloads/
 
-# Also ignore large common data types
-*.pdf
-*.json
-*.csv
-*.xlsx
-*.log
-
-# Python
-__pycache__/
-*.pyc
-
-# macOS
-.DS_Store
