@@ -146,14 +146,16 @@ def _read_geometry_with_crs(path: Path) -> gpd.GeoDataFrame:
 
 
 def _load_geometries() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame, str]:
+    LOGGER.info("Environment mode: %s", ENVIRONMENT)
     if ENVIRONMENT == "production":
+        LOGGER.info("Attempting production geometry load from %s and %s", PROD_SA_GEOJSON, PROD_ED_GEOJSON)
         if not PROD_SA_GEOJSON.exists():
-            raise FileNotFoundError(
+            raise RuntimeError(
                 f"Production geometry file missing: {PROD_SA_GEOJSON}. "
                 "Set ENVIRONMENT=development to use local shapefiles."
             )
         if not PROD_ED_GEOJSON.exists():
-            raise FileNotFoundError(
+            raise RuntimeError(
                 f"Production geometry file missing: {PROD_ED_GEOJSON}. "
                 "Set ENVIRONMENT=development to use local shapefiles."
             )
@@ -161,8 +163,9 @@ def _load_geometries() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame, str]:
         ed_gdf = _read_geometry_with_crs(PROD_ED_GEOJSON)
         source = "production GeoJSON (/data/dublin_small_areas.geojson + /data/dublin_electoral_divisions.geojson)"
     else:
+        LOGGER.info("Attempting development geometry load from %s", DEV_SA_SHP)
         if not DEV_SA_SHP.exists():
-            raise FileNotFoundError(
+            raise RuntimeError(
                 f"Development shapefile missing: {DEV_SA_SHP}. "
                 "Ensure local shapefiles exist under 0. data/ or set ENVIRONMENT=production."
             )
@@ -322,7 +325,11 @@ def _load_data() -> dict[str, Any]:
     }
 
 
-DATA = _load_data()
+try:
+    DATA = _load_data()
+except Exception:
+    LOGGER.exception("Backend startup failed during data/geometry loading")
+    raise
 
 
 def _apply_filters(df: gpd.GeoDataFrame, sig: FilterSignature) -> gpd.GeoDataFrame:
