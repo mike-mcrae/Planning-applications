@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass
 from functools import lru_cache
@@ -15,10 +16,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from shapely.geometry import box
 
-BASE_DIR = Path(__file__).resolve().parents[1]
+BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 LEGACY_DATA_DIR = BASE_DIR / "0. data"
 LEGACY_SCRIPTS_DIR = BASE_DIR / "1. scripts"
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+
+logging.basicConfig(level=logging.INFO)
+LOGGER = logging.getLogger("planning_explorer")
 
 
 def _pick_path(*candidates: Path) -> Path:
@@ -40,12 +45,13 @@ MASTER_OBS_CSV = _pick_path(
     DATA_DIR / "applications_master_with_obs.csv",
     LEGACY_SCRIPTS_DIR / "outputs" / "applications_master_with_obs.csv",
 )
-SA_SHP = _pick_path(
-    DATA_DIR / "small_areas" / "SMALL_AREA_2022.shp",
+DEV_SA_SHP = (
     LEGACY_DATA_DIR
     / "Small_Area_National_Statistical_Boundaries_2022_Ungeneralised_view_2205995009404967982"
-    / "SMALL_AREA_2022.shp",
+    / "SMALL_AREA_2022.shp"
 )
+PROD_SA_GEOJSON = DATA_DIR / "dublin_small_areas.geojson"
+PROD_ED_GEOJSON = DATA_DIR / "dublin_electoral_divisions.geojson"
 SA_POP_JSON = _pick_path(
     DATA_DIR / "cso" / "SAP2022T1T1ASA.20260219T220214.json",
     LEGACY_DATA_DIR / "cso" / "SAP2022T1T1ASA.20260219T220214.json",
@@ -128,6 +134,65 @@ def _resolve_year_window(year: int | None, year_min: int | None, year_max: int |
     if year is not None:
         return year, year
     return year_min, year_max
+
+
+def _read_geometry_with_crs(path: Path) -> gpd.GeoDataFrame:
+    frame = gpd.read_file(path)
+    if frame.crs is None:
+        frame = frame.set_crs("EPSG:4326")
+    elif str(frame.crs).upper() != "EPSG:4326":
+        frame = frame.to_crs("EPSG:4326")
+    return frame
+
+
+def _load_geometries() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame, str]:
+    if ENVIRONMENT == "production":
+        if not PROD_SA_GEOJSON.exists():
+            raise FileNotFoundError(
+                f"Production geometry file missing: {PROD_SA_GEOJSON}. "
+                "Set ENVIRONMENT=development to use local shapefiles."
+            )
+        if not PROD_ED_GEOJSON.exists():
+            raise FileNotFoundError(
+                f"Production geometry file missing: {PROD_ED_GEOJSON}. "
+                "Set ENVIRONMENT=development to use local shapefiles."
+            )
+        sa_gdf = _read_geometry_with_crs(PROD_SA_GEOJSON)
+        ed_gdf = _read_geometry_with_crs(PROD_ED_GEOJSON)
+        source = "production GeoJSON (/data/dublin_small_areas.geojson + /data/dublin_electoral_divisions.geojson)"
+    else:
+        if not DEV_SA_SHP.exists():
+            raise FileNotFoundError(
+                f"Development shapefile missing: {DEV_SA_SHP}. "
+                "Ensure local shapefiles exist under 0. data/ or set ENVIRONMENT=production."
+            )
+        sa_gdf = gpd.read_file(DEV_SA_SHP)
+        sa_gdf = sa_gdf.loc[sa_gdf["COUNTY_ENG"].astype(str).str.upper() == "DUBLIN CITY"].copy()
+        sa_gdf = sa_gdf.to_crs("EPSG:4326")
+        ed_gdf = sa_gdf.dissolve(by="ED_GUID", as_index=False, aggfunc="first")
+        source = "development shapefile (0. data/.../SMALL_AREA_2022.shp)"
+
+    if "SA_GUID_21" not in sa_gdf.columns:
+        raise ValueError("Missing required SA column: SA_GUID_21")
+    if "ED_GUID" not in sa_gdf.columns:
+        raise ValueError("Missing required SA column: ED_GUID")
+    if "geometry" not in sa_gdf.columns:
+        raise ValueError("Missing required SA geometry column")
+    if "ED_GUID" not in ed_gdf.columns:
+        raise ValueError("Missing required ED column: ED_GUID")
+    if "geometry" not in ed_gdf.columns:
+        raise ValueError("Missing required ED geometry column")
+
+    if "SA_PUB2022" not in sa_gdf.columns:
+        sa_gdf["SA_PUB2022"] = sa_gdf["SA_GUID_21"].astype(str)
+    if "ED_ENGLISH" not in sa_gdf.columns:
+        sa_gdf["ED_ENGLISH"] = sa_gdf["ED_GUID"].astype(str)
+    if "ED_ENGLISH" not in ed_gdf.columns and "ed_name" not in ed_gdf.columns:
+        ed_gdf["ed_name"] = ed_gdf["ED_GUID"].astype(str)
+    elif "ed_name" not in ed_gdf.columns and "ED_ENGLISH" in ed_gdf.columns:
+        ed_gdf["ed_name"] = ed_gdf["ED_ENGLISH"]
+
+    return sa_gdf, ed_gdf, source
 
 
 def _load_data() -> dict[str, Any]:
@@ -222,9 +287,7 @@ def _load_data() -> dict[str, Any]:
         crs="EPSG:4326",
     )
 
-    sa_gdf = gpd.read_file(SA_SHP)
-    sa_gdf = sa_gdf.loc[sa_gdf["COUNTY_ENG"].astype(str).str.upper() == "DUBLIN CITY"].copy()
-    sa_gdf = sa_gdf.to_crs("EPSG:4326")
+    sa_gdf, ed_gdf, geometry_source = _load_geometries()
 
     points_joined = gpd.sjoin(
         points_gdf,
@@ -238,10 +301,15 @@ def _load_data() -> dict[str, Any]:
 
     sa_base = sa_gdf.merge(sa_pop, on="SA_GUID_21", how="left")
     ed_base = (
-        sa_gdf.dissolve(by="ED_GUID", as_index=False, aggfunc="first")
+        ed_gdf
         .merge(ed_pop, on="ED_GUID", how="left")
         .rename(columns={"ED_ENGLISH": "ed_name"})
     )
+
+    LOGGER.info("Environment mode: %s", ENVIRONMENT)
+    LOGGER.info("Geometry source: %s", geometry_source)
+    LOGGER.info("Loaded SA polygons: %s", len(sa_gdf))
+    LOGGER.info("Loaded ED polygons: %s", len(ed_base))
 
     years = points_joined["received_date"].dt.year.dropna().astype(int)
 
@@ -522,6 +590,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/healthz")
+def healthz() -> dict[str, str]:
+    return {"status": "ok"}
 
 
 @app.get("/meta")
