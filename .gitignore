@@ -1,14 +1,14 @@
 # =====================================
-# RAW LOCAL DATA (never push)
+# LARGE RAW SPATIAL FILES (ignore only these)
 # =====================================
-0. data/
-1. scripts/logs/
-1. scripts/outputs/
-1. scripts/downloads/
 
-# =====================================
-# Shapefile components
-# =====================================
+# Full Small Area shapefile folder
+0. data/Small_Area_National_Statistical_Boundaries_2022_Ungeneralised_view_2205995009404967982/
+
+# Large national planning CSV
+0. data/IrishPlanningApplications_DublinCityCouncil.csv
+
+# Shapefile components (safety net)
 *.shp
 *.dbf
 *.shx
@@ -17,8 +17,17 @@
 *.zip
 
 # =====================================
+# Dev outputs / logs
+# =====================================
+
+1. scripts/logs/
+1. scripts/outputs/
+1. scripts/downloads/
+
+# =====================================
 # Python
 # =====================================
+
 __pycache__/
 *.pyc
 .venv/
@@ -26,11 +35,13 @@ __pycache__/
 # =====================================
 # Environment
 # =====================================
+
 .env
 
 # =====================================
 # Frontend build artifacts
 # =====================================
+
 frontend/node_modules/
 frontend/dist/
 frontend/build/
@@ -38,5 +49,7 @@ frontend/build/
 # =====================================
 # OS
 # =====================================
+
 .DS_Store
+
 
