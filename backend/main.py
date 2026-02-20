@@ -631,6 +631,13 @@ def _apply_scale(sa: gpd.GeoDataFrame, ed: gpd.GeoDataFrame, metric: str) -> tup
 def _filter_bbox(df: gpd.GeoDataFrame, min_lng: float | None, min_lat: float | None, max_lng: float | None, max_lat: float | None) -> gpd.GeoDataFrame:
     if None in {min_lng, min_lat, max_lng, max_lat}:
         return df
+    if {"longitude", "latitude"}.issubset(df.columns):
+        return df.loc[
+            (df["longitude"] >= min_lng)
+            & (df["longitude"] <= max_lng)
+            & (df["latitude"] >= min_lat)
+            & (df["latitude"] <= max_lat)
+        ]
     bbox_geom = box(min_lng, min_lat, max_lng, max_lat)
     return df.loc[df.geometry.intersects(bbox_geom)]
 

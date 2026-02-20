@@ -7,6 +7,7 @@ import {
   Pane,
   Popup,
   TileLayer,
+  useMap,
   useMapEvents,
 } from "react-leaflet";
 
@@ -31,6 +32,17 @@ L.Icon.Default.mergeOptions({
 });
 
 function MapBoundsWatcher({ onBoundsChange }) {
+  const map = useMap();
+  useEffect(() => {
+    const bounds = map.getBounds();
+    onBoundsChange({
+      min_lng: bounds.getWest(),
+      min_lat: bounds.getSouth(),
+      max_lng: bounds.getEast(),
+      max_lat: bounds.getNorth(),
+    });
+  }, [map, onBoundsChange]);
+
   useMapEvents({
     moveend: (event) => {
       const bounds = event.target.getBounds();
@@ -135,6 +147,7 @@ export default function App() {
   const applicationsRequestRef = useRef(0);
   const choroplethRequestRef = useRef(0);
   const summaryRequestRef = useRef(0);
+  const mapAbortRef = useRef(null);
 
   useEffect(() => {
     fetch(`${API_BASE}/meta`)
@@ -148,18 +161,27 @@ export default function App() {
   }, []);
 
   const mapQuery = useMemo(() => toQuery(filters, bbox, null), [filters, bbox]);
-  const choroplethQuery = useMemo(() => toQuery(filters, bbox, metric), [filters, bbox, metric]);
-  const summaryQuery = useMemo(() => toQuery(filters, bbox, null), [filters, bbox]);
+  const choroplethQuery = useMemo(() => toQuery(filters, null, metric), [filters, metric]);
+  const summaryQuery = useMemo(() => toQuery(filters, null, null), [filters]);
 
   useEffect(() => {
+    if (!bbox) return;
     const requestId = ++applicationsRequestRef.current;
-    fetch(`${API_BASE}/applications?${mapQuery}`)
+    if (mapAbortRef.current) {
+      mapAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    mapAbortRef.current = controller;
+    fetch(`${API_BASE}/applications?${mapQuery}`, { signal: controller.signal })
       .then((res) => res.json())
       .then((data) => {
         if (requestId !== applicationsRequestRef.current) return;
         setApplications(data);
       })
-      .catch(() => setApplications({ type: "FeatureCollection", features: [] }));
+      .catch((err) => {
+        if (err?.name === "AbortError") return;
+        setApplications({ type: "FeatureCollection", features: [] });
+      });
   }, [mapQuery]);
 
   useEffect(() => {
