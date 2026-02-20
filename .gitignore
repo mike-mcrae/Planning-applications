@@ -1,0 +1,36 @@
+# Ignore download folders
+1. scripts/downloads/
+1. scripts/outputs/downloads/
+
+# Python
+__pycache__/
+*.pyc
+
+# Environment
+.env
+.venv/
+
+# Frontend build artifacts
+frontend/node_modules/
+frontend/dist/
+
+# macOS
+.DS_Store
+# Ignore scrape outputs
+1. scripts/downloads/
+1. scripts/outputs/downloads/
+
+# Also ignore large common data types
+*.pdf
+*.json
+*.csv
+*.xlsx
+*.log
+
+# Python
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+
