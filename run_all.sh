@@ -42,14 +42,14 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-uvicorn backend.app.main:app --reload --host 0.0.0.0 --port "$BACKEND_PORT" &
+uvicorn backend.main:app --reload --host 0.0.0.0 --port "$BACKEND_PORT" &
 BACKEND_PID=$!
 
 echo "Backend running at http://localhost:$BACKEND_PORT"
 
 (
   cd frontend
-  VITE_API_BASE="http://localhost:$BACKEND_PORT" npm run dev -- --host 0.0.0.0 --port "$FRONTEND_PORT"
+  REACT_APP_API_URL="http://localhost:$BACKEND_PORT" npm run dev -- --host 0.0.0.0 --port "$FRONTEND_PORT"
 ) &
 FRONTEND_PID=$!
 

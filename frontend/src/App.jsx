@@ -10,7 +10,7 @@ import {
   useMapEvents,
 } from "react-leaflet";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+const API_BASE = process.env.REACT_APP_API_URL || "";
 
 const DUBLIN_CENTER = [53.3498, -6.2603];
 const DUBLIN_BOUNDS = [

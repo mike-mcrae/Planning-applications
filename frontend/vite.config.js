@@ -6,4 +6,11 @@ export default defineConfig({
   server: {
     port: 5173,
   },
+  build: {
+    outDir: "build",
+    emptyOutDir: true,
+  },
+  define: {
+    "process.env.REACT_APP_API_URL": JSON.stringify(process.env.REACT_APP_API_URL || ""),
+  },
 });

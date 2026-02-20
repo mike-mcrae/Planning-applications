@@ -1,91 +1,106 @@
 # Planning Applications Explorer (Dublin City)
 
-Full-stack local web app for spatial exploration of Dublin City planning applications.
+Production-ready full-stack app for exploring Dublin City planning applications.
 
-## Structure
+## Folder Structure
 
-- `backend/`: FastAPI API and spatial aggregation logic
-- `frontend/`: React + Leaflet client
-- `0. data/`: source data files used by backend
-- `data/`: reserved for future app-specific derived exports
-
-## Backend
-
-From repo root:
-
-```bash
-source .venv/bin/activate
-pip install -r backend/requirements.txt
-uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+```text
+/backend
+  app.py
+  main.py
+  requirements.txt
+/frontend
+  package.json
+  src/
+/data
+README.md
+render.yaml
 ```
 
-API endpoints:
+Notes:
+- Backend supports both `/data` (production) and legacy local paths (`0. data`, `1. scripts`) automatically.
 
-- `GET /meta`
+## Backend (FastAPI)
+
+Run locally from `backend/`:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app:app --reload
+```
+
+Render production start command:
+
+```bash
+uvicorn app:app --host 0.0.0.0 --port $PORT
+```
+
+### Required API endpoints
+
 - `GET /applications`
 - `GET /small_areas`
 - `GET /electoral_divisions`
-- `GET /summary`
 
-Filters are query-parameter based and server-side.
+Supported filter params include:
+- `?year=`
+- `?min_units=`
+- `?has_objection=`
+- `?decision=`
 
-### One-command run
+Also supported:
+- `year_min`, `year_max`, `development`, `top_decile`, `outcomes`, bbox params, etc.
 
-From repo root:
+### Backend production features
 
-```bash
-./run_all.sh
-```
+- Startup precomputation of joins/aggregates
+- Bounding-box filtering
+- GZip compression middleware
+- CORS middleware with `FRONTEND_ORIGIN` env var
 
-This script:
-- starts backend + frontend together
-- auto-picks a free backend port if `8000` is already in use
-- wires frontend API base URL to the chosen backend port
-
-## Frontend
+## Frontend (React + Vite)
 
 From `frontend/`:
 
 ```bash
 npm install
-npm run dev
+npm run build
 ```
 
-The frontend defaults to `http://localhost:8000`. Override with:
+Build output is generated to:
+
+- `frontend/build`
+
+Frontend API URL is configured at build-time via:
+
+- `REACT_APP_API_URL`
+
+Example:
 
 ```bash
-VITE_API_BASE=http://localhost:8000 npm run dev
+REACT_APP_API_URL=https://your-backend.onrender.com npm run build
 ```
 
-## Core Features Implemented
+## Render Deployment
 
-- Small Area choropleth layer
-- Electoral Division choropleth layer (dissolved from SA)
-- Raw planning application points
-- Objection heat-style overlay
-- Layer toggles
-- Sidebar filters:
-  - Time (year range + custom date range)
-  - Time slider with play/pause animation
-  - Development categories
-  - Scale thresholds
-  - Engagement thresholds
-  - Outcome filters
-- Dynamic summary panel:
-  - Total applications
-  - % with objection
-  - Median letters
-  - Letters per 1000 residents
-  - Refusal rate
-  - Appeal rate
-- 95th percentile choropleth capping with explicit zero category metadata
-- Shared metric scale computation for SA and ED per filter state
-- Bounding box filtering for map movement
-- Cached aggregate responses in-memory (`lru_cache`)
+`render.yaml` is included for two services:
 
-## Notes
+1. `planning-explorer-backend` (Python web service)
+2. `planning-explorer-frontend` (Static site)
 
-- Population joins use:
-  - SA JSON (`SAP2022T1T1ASA...json`) for SA-level population
-  - ED CSV (`CensusHub2022_T9_1_ED...csv`) for ED-level population
-- Spatial boundary source is `SMALL_AREA_2022.shp` filtered to `COUNTY_ENG == "DUBLIN CITY"`.
+### Backend env vars
+
+- `FRONTEND_ORIGIN=https://your-frontend.onrender.com`
+
+### Frontend env vars
+
+- `REACT_APP_API_URL=https://your-backend.onrender.com`
+
+### Deploy
+
+1. Push repo to GitHub.
+2. In Render, create Blueprint deploy from repo (uses `render.yaml`).
+3. Verify backend starts with `uvicorn app:app --host 0.0.0.0 --port $PORT`.
+4. Verify frontend static publish path is `build`.
+5. Open frontend public URL and test map + filters.

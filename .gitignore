@@ -13,6 +13,7 @@ __pycache__/
 # Frontend build artifacts
 frontend/node_modules/
 frontend/dist/
+frontend/build/
 
 # macOS
 .DS_Store
@@ -33,4 +34,3 @@ __pycache__/
 
 # macOS
 .DS_Store
-
