@@ -14,6 +14,8 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from shapely.geometry import box
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -24,6 +26,8 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger("planning_explorer")
+FRONTEND_BUILD_DIR = BASE_DIR / "frontend" / "build"
+FRONTEND_INDEX_HTML = FRONTEND_BUILD_DIR / "index.html"
 
 
 def _pick_path(*candidates: Path) -> Path:
@@ -921,3 +925,31 @@ def region_summary(
     summary_payload["region_id"] = region_id
     summary_payload["region_name"] = region_name
     return summary_payload
+
+
+if FRONTEND_INDEX_HTML.exists():
+    assets_dir = FRONTEND_BUILD_DIR / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/", include_in_schema=False)
+    def spa_root() -> FileResponse:
+        return FileResponse(FRONTEND_INDEX_HTML)
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa_fallback(full_path: str) -> FileResponse:
+        api_roots = {
+            "applications",
+            "small_areas",
+            "electoral_divisions",
+            "summary",
+            "meta",
+            "region_summary",
+            "healthz",
+            "docs",
+            "redoc",
+            "openapi.json",
+        }
+        if full_path.split("/")[0] in api_roots:
+            raise HTTPException(status_code=404, detail="Not Found")
+        return FileResponse(FRONTEND_INDEX_HTML)

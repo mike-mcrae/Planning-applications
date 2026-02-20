@@ -44,12 +44,10 @@ __pycache__/
 
 frontend/node_modules/
 frontend/dist/
-frontend/build/
 
 # =====================================
 # OS
 # =====================================
 
 .DS_Store
-
 
